@@ -1,5 +1,8 @@
-package com.example.myplugin;
+package tf.tuff.myplugin;
 
+import org.bukkit.ChatColor;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
 import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -37,6 +40,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
 
     public static final String CHANNEL = "eagler:below_y0";
     private final Set<ChunkSectionKey> sentSections = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private boolean isMuted = false;
 
     @Override
     public void onEnable() {
@@ -44,10 +48,31 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         getServer().getMessenger().registerOutgoingPluginChannel(this, CHANNEL);
         getServer().getMessenger().registerIncomingPluginChannel(this, CHANNEL, this);
         getServer().getPluginManager().registerEvents(this, this);
+        this.getCommand("tuffx").setExecutor(this);
         logFancyEnable();
     }
-    
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("tuffx")) {
+            if (args.length > 0 && args[0].equalsIgnoreCase("mute")) {
+                if (!sender.hasPermission("tuffx.mute")) {
+                    sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
+                    return true;
+                }
+                isMuted = !isMuted;
+                String status = isMuted ? ChatColor.RED + "MUTED" : ChatColor.GREEN + "UNMUTED";
+                sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.YELLOW + "Console output is now " + status + ".");
+                return true;
+            }
+            sender.sendMessage(ChatColor.GOLD + "[TuffX] Usage: /tuffx mute");
+            return true;
+        }
+        return false;
+    }
+
     private void logFancyEnable() {
+        if (isMuted) return;
         getLogger().info("");
         getLogger().info("████████╗██╗   ██╗███████╗ ███████╗ ██╗  ██╗");
         getLogger().info("╚══██╔══╝██║   ██║██╔════╝ ██╔════╝ ╚██╗██╔╝");
@@ -56,6 +81,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         getLogger().info("   ██║   ╚██████╔╝██║      ██║      ██╔╝╚██╗");
         getLogger().info("   ╚═╝    ╚═════╝ ╚═╝      ╚═╝      ╚═╝  ╚═╝");
         getLogger().info("");
+        getLogger().info("by potato patato :0, edited by coleis1op");
     }
 
     @Override
@@ -63,13 +89,13 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
         sentSections.clear();
-        getLogger().info("TuffX disabled");
+        if (!isMuted) getLogger().info("TuffX disabled");
     }
-    
+
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
         if (!channel.equals(CHANNEL)) { return; }
-        
+
         try (ByteArrayInputStream bin = new ByteArrayInputStream(message); DataInputStream in = new DataInputStream(bin)) {
             int x = in.readInt();
             int y = in.readInt();
@@ -78,7 +104,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             byte[] actionBytes = new byte[actionLength];
             in.readFully(actionBytes);
             String action = new String(actionBytes, StandardCharsets.UTF_8);
-            
+
             new BukkitRunnable() {
                 @Override
                 public void run() {
@@ -86,7 +112,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                 }
             }.runTask(this);
         } catch (IOException e) {
-            getLogger().warning("Failed to parse plugin message from " + player.getName() + ": " + e.getMessage());
+            if (!isMuted) getLogger().warning("Failed to parse plugin message from " + player.getName() + ": " + e.getMessage());
         }
     }
 
@@ -103,21 +129,21 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                 }
                 sendBlockUpdateToNearby(block.getLocation(), Material.AIR);
                 break;
-                
+
             case "use_on_block":
                 ItemStack itemInHand = player.getInventory().getItemInMainHand();
                 PlayerInteractEvent event = new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, itemInHand, block, block.getFace(player.getLocation().getBlock()));
                 getServer().getPluginManager().callEvent(event);
-                
+
                 sendBlockUpdateToNearby(block.getLocation(), world.getBlockAt(loc).getType());
                 break;
-                
+
             case "dig_start_destroy_block":
             case "dig_abort_destroy_block":
                 break;
-                
+
             default:
-                getLogger().info("Received unhandled action '" + action + "' from " + player.getName());
+                if (!isMuted) getLogger().info("Received unhandled action '" + action + "' from " + player.getName());
                 break;
         }
     }
@@ -140,25 +166,24 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             out.writeShort(LegacyBlockIdManager.getLegacyShort(newMaterial));
             return bout.toByteArray();
         } catch (IOException e) {
-            getLogger().severe("Failed to create block update payload! " + e.getMessage());
+            if (!isMuted) getLogger().severe("Failed to create block update payload! " + e.getMessage());
             return new byte[0];
         }
     }
-    
+
     private byte[] createWelcomePayload(String message, int someNumber) {
-        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); 
+        try (ByteArrayOutputStream bout = new ByteArrayOutputStream();
              DataOutputStream out = new DataOutputStream(bout)) {
-            
-            out.writeUTF("welcome_data"); 
-      
+
+            out.writeUTF("welcome_data");
             out.writeUTF(message);
             out.writeInt(someNumber);
-            
+
             return bout.toByteArray();
-            
+
         } catch (IOException e) {
-            getLogger().severe("Failed to create welcome payload! " + e.getMessage());
-            return new byte[0]; 
+            if (!isMuted) getLogger().severe("Failed to create welcome payload! " + e.getMessage());
+            return new byte[0];
         }
     }
 
@@ -168,7 +193,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             out.writeInt(cx);
             out.writeInt(cz);
             out.writeInt(sectionY);
-            
+
             int baseY = sectionY * 16;
             for (int y = 0; y < 16; y++) {
                 for (int z = 0; z < 16; z++) {
@@ -185,7 +210,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             return bout.toByteArray();
         }
     }
-    
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerTeleport(PlayerTeleportEvent event) {
         if (event.getCause() == TeleportCause.UNKNOWN && event.getFrom().getY() < 0) {
@@ -194,13 +219,13 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             }
         }
     }
-    
+
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
         sentSections.removeIf(key -> key.playerId().equals(playerId));
     }
-    
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -215,7 +240,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                 if (welcomePayload.length > 0) {
                     player.sendPluginMessage(TuffX.this, CHANNEL, welcomePayload);
                 }
-                
+
                 Chunk playerChunk = player.getLocation().getChunk();
                 int viewDistance = getServer().getViewDistance();
                 World world = player.getWorld();
@@ -229,9 +254,9 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                     }
                 }
             }
-        }.runTaskLater(this, 20L); 
+        }.runTaskLater(this, 20L);
     }
-    
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onChunkLoad(ChunkLoadEvent event) {
         if (event.isNewChunk()) return;
@@ -276,10 +301,12 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                             }
                         }.runTask(TuffX.this);
                     } catch (IOException e) {
-                        getLogger().severe("Failed to create payload for chunk section: " + key + " | " + e.getMessage());
+                        if (!isMuted) getLogger().severe("Failed to create payload for chunk section: " + key + " | " + e.getMessage());
                     }
                 }
             }
         }.runTaskAsynchronously(this);
     }
+
+    private record ChunkSectionKey(UUID playerId, String worldName, int cx, int cz, int sectionY) {}
 }
