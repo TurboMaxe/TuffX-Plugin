@@ -332,6 +332,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        sentSections.removeIf(key -> key.playerId().equals(player.getUniqueId()));
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -390,6 +391,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                 for (int sectionY = -4; sectionY < 0; sectionY++) {
                     ChunkSectionKey key = new ChunkSectionKey(uid, worldName, cx, cz, sectionY);
                     if (sentSections.contains(key)) {
+                        getLogger().info("Skipping already-sent section: " + key);
                         continue;
                     }
                     try {
