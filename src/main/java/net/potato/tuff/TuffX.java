@@ -26,6 +26,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
 import java.util.Optional;
+import org.bukkit.Bukkit;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -53,22 +54,27 @@ import org.bukkit.ChunkSnapshot;
 import org.bukkit.Chunk;
 import org.bukkit.entity.Entity;
 
+import com.viaversion.viaversion.api.Via;
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
+import com.viaversion.viaversion.api.data.MappingDataBase;
+
 public class TuffX extends JavaPlugin implements Listener, PluginMessageListener, TabCompleter {
 
     public static final String CHANNEL = "eagler:below_y0";
     private final Set<ChunkSectionKey> sentSections = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private boolean isMuted = false;
     private final Map<UUID, Chunk> playerLastChunk = new HashMap<>();
+    public ViaBlockIds viablockids;
 
     @Override
     public void onEnable() {
-        LegacyBlockIdManager.initialize(this);
         getServer().getMessenger().registerOutgoingPluginChannel(this, CHANNEL);
         getServer().getMessenger().registerIncomingPluginChannel(this, CHANNEL, this);
         getServer().getPluginManager().registerEvents(this, this);
         this.getCommand("tuffx").setExecutor(this);
         this.getCommand("tuffx").setTabCompleter(this);
         logFancyEnable();
+        this.viablockids = new ViaBlockIds(this);
     }
 
     @Override
@@ -257,7 +263,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                 PlayerInteractEvent event = new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, itemInHand, block, block.getFace(player.getLocation().getBlock()));
                 getServer().getPluginManager().callEvent(event);
 
-                sendBlockUpdateToNearby(block.getLocation(), world.getBlockAt(loc).getType());
+                sendBlockUpdateToNearby(block.getLocation(), world.getBlockAt(loc).getType(), player);
                 break;
 
             case "dig_start_destroy_block":
@@ -278,8 +284,8 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         }
     }
 
-    private void sendBlockUpdateToNearby(Location loc, Material newMaterial) {
-        byte[] payload = createBlockUpdatePayload(loc, newMaterial);
+    private void sendBlockUpdateToNearby(Location loc, Material newMaterial, Player player) {
+        byte[] payload = createBlockUpdatePayload(loc, newMaterial, player);
         for (Player p : loc.getWorld().getPlayers()) {
             if (p.getLocation().distanceSquared(loc) < 4096) {
                 p.sendPluginMessage(this, CHANNEL, payload);
@@ -315,7 +321,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         }
     }*/
 
-    private byte[] createBlockUpdatePayload(Location loc, Material newMaterial) {
+    private byte[] createBlockUpdatePayload(Location loc, Material newMaterial, Player player) {
         try (ByteArrayOutputStream bout = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(bout)) {
             
@@ -328,11 +334,11 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             if (world == null) throw new IOException("World is null for location!");
             
             Block block = world.getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
-            Material type = block.getType();
-            if (type == null) type = Material.AIR;
             
-            int legacyId = LegacyBlockIds.getId(type.name().toLowerCase());
-            int legacyMeta = 0; //data & 0xF;
+            int[] legacyData = viablockids.toLegacy(block);
+            int legacyId = legacyData[0];
+            int legacyMeta = legacyData[1];
+            Bukkit.getLogger().info("Recieved legacy id "+legacyId+" and meta "+legacyMeta);
             short combined = (short) ((legacyMeta << 12) | (legacyId & 0xFFF));
 
             out.writeShort(combined);
@@ -384,7 +390,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         }
     }*/
 
-    private byte[] createSectionPayload(World world, int cx, int cz, int sectionY) throws IOException {
+    private byte[] createSectionPayload(World world, int cx, int cz, int sectionY, Player player) throws IOException {
         //Chunk chunk = world.getChunkAt(cx, cz);
         //ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false); // avoid lighting overhead
 
@@ -405,17 +411,16 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                         int worldZ = (cz << 4) + z;
 
                         Block block = world.getBlockAt(worldX, worldY, worldZ);
-                        Material type = block.getType();
-                        byte data = block.getData(); 
-                        if (type == null) type = Material.AIR;
 
                         //short legacyId = LegacyBlockIdManager.getLegacyShort(type);
                         //out.writeShort(legacyId);
 
                         //Material type = snapshot.getBlockType(x, worldY, z);
                         
-                        int legacyId = LegacyBlockIds.getId(type.name().toLowerCase());
-                        int legacyMeta = data & 0xF;
+                        int[] legacyData = viablockids.toLegacy(block);
+                        int legacyId = legacyData[0];
+                        int legacyMeta = legacyData[1];
+                        Bukkit.getLogger().info("Recieved legacy id "+legacyId+" and meta "+legacyMeta);
                         short combined = (short)((legacyMeta << 12) | (legacyId & 0xFFF));
                         out.writeShort(combined);
                     }
@@ -424,6 +429,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             return bout.toByteArray();
         }
     }
+
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerTeleport(PlayerTeleportEvent event) {
@@ -573,7 +579,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                         continue;
                     }
                     try {
-                        byte[] payload = createSectionPayload(world, cx, cz, sectionY);
+                        byte[] payload = createSectionPayload(world, cx, cz, sectionY, player);
                         new BukkitRunnable() {
                             @Override
                             public void run() {
@@ -600,21 +606,24 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
-        sendBlockUpdateToNearby(block.getLocation(), Material.AIR);
+        sendBlockUpdateToNearby(block.getLocation(), Material.AIR, event.getPlayer());
         //sendChunkSectionIfBelowY0(event.getPlayer(), block);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlock();
-        sendBlockUpdateToNearby(block.getLocation(), block.getType());
+        sendBlockUpdateToNearby(block.getLocation(), block.getType(), event.getPlayer());
         //sendChunkSectionIfBelowY0(event.getPlayer(), block);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPhysics(BlockPhysicsEvent event) {
         Block block = event.getBlock();
-        sendBlockUpdateToNearby(block.getLocation(), block.getType());
+        //sendBlockUpdateToNearby(block.getLocation(), block.getType(), block.getWorld().getPlayers());
+        for (Player p : block.getWorld().getPlayers()) {
+            sendBlockUpdateToNearby(block.getLocation(), block.getType(), p);
+        }
         //sendChunkSectionIfBelowY0(null, block);
     }
 
