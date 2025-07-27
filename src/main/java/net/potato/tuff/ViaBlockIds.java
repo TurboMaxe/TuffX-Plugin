@@ -103,7 +103,7 @@ public class ViaBlockIds {
                 String key = states.get(i).replace("minecraft:", "");
                 int[] legacy;
                 legacy = convertToLegacy(i);
-                
+
                 newLegacyMap.put(key, legacy);
             }
 
@@ -158,7 +158,7 @@ public class ViaBlockIds {
             );
 
         if (path == null) {
-            if (debug) Bukkit.getLogger().warning("[TuffX] Protocol path came back as NULL. Is ViaBackwards installed?");
+            Bukkit.getLogger().warning("[TuffX] Protocol path is null!");
             return new int[]{1, 0};
         }
         

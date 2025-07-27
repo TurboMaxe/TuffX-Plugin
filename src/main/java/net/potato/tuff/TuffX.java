@@ -338,7 +338,6 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             int[] legacyData = viablockids.toLegacy(block);
             int legacyId = legacyData[0];
             int legacyMeta = legacyData[1];
-            Bukkit.getLogger().info("Recieved legacy id "+legacyId+" and meta "+legacyMeta);
             short combined = (short) ((legacyMeta << 12) | (legacyId & 0xFFF));
 
             out.writeShort(combined);
@@ -420,7 +419,6 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                         int[] legacyData = viablockids.toLegacy(block);
                         int legacyId = legacyData[0];
                         int legacyMeta = legacyData[1];
-                        Bukkit.getLogger().info("Recieved legacy id "+legacyId+" and meta "+legacyMeta);
                         short combined = (short)((legacyMeta << 12) | (legacyId & 0xFFF));
                         out.writeShort(combined);
                     }
