@@ -11,6 +11,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.block.Block;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.block.data.BlockData; 
 
 import java.io.File;
 import java.io.IOException;
@@ -67,6 +68,11 @@ public class ViaBlockIds {
     public int[] toLegacy(Block block) {
         String blockKey = block.getBlockData().getAsString().replace("minecraft:", "");
         return legacyMap.getOrDefault(blockKey, new int[]{1, 0});
+    }
+
+    public int[] toLegacy(BlockData blockData) {
+        String blockKey = blockData.getAsString().replace("minecraft:", "");
+        return toLegacy(blockKey);
     }
 
     private String getServerMinecraftVersion() {

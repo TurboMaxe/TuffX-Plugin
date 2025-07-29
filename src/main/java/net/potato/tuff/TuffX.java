@@ -1,649 +1,204 @@
 package net.potato.tuff;
 
-import org.bukkit.ChatColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.Chunk;
-import org.bukkit.GameMode;
+import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerTeleportEvent;
-import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
-import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
-import java.util.Optional;
-import org.bukkit.Bukkit;
+import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.block.BlockPhysicsEvent;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.player.PlayerMoveEvent;
-
-import org.bukkit.ChunkSnapshot;
-import org.bukkit.Chunk;
-import org.bukkit.entity.Entity;
-
-import com.viaversion.viaversion.api.Via;
-import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
-import com.viaversion.viaversion.api.data.MappingDataBase;
-
-public class TuffX extends JavaPlugin implements Listener, PluginMessageListener, TabCompleter {
+public class TuffX extends JavaPlugin implements Listener, PluginMessageListener {
 
     public static final String CHANNEL = "eagler:below_y0";
-    private final Set<ChunkSectionKey> sentSections = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private boolean isMuted = false;
     public ViaBlockIds viablockids;
+
+    private final Map<UUID, Queue<Vector>> requestQueue = new ConcurrentHashMap<>();
+    private BukkitTask processorTask;
 
     @Override
     public void onEnable() {
         getServer().getMessenger().registerOutgoingPluginChannel(this, CHANNEL);
         getServer().getMessenger().registerIncomingPluginChannel(this, CHANNEL, this);
         getServer().getPluginManager().registerEvents(this, this);
-        this.getCommand("tuffx").setExecutor(this);
-        this.getCommand("tuffx").setTabCompleter(this);
-        logFancyEnable();
-        if (this.viablockids == null) this.viablockids = new ViaBlockIds(this);
-    }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!command.getName().equalsIgnoreCase("tuffx")) {
-            return false;
+        if (this.viablockids == null) {
+            this.viablockids = new ViaBlockIds(this);
         }
 
-        if (args.length == 0) {
-            handleHelpCommand(sender);
-            return true;
-        }
-
-        switch (args[0].toLowerCase()) {
-            case "mute":
-                handleMuteCommand(sender);
-                break;
-            case "reload":
-                handleReloadCommand(sender);
-                break;
-            case "reloadchunks":
-                handleReloadChunksCommand(sender);
-                break;
-            case "help":
-                handleHelpCommand(sender);
-                break;
-            default:
-                sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.RED + "Unknown subcommand. Use /tuffx help.");
-                break;
-        }
-        return true;
-    }
-
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (command.getName().equalsIgnoreCase("tuffx")) {
-            if (args.length == 1) {
-                List<String> subcommands = new ArrayList<>();
-                if (sender.hasPermission("tuffx.mute")) subcommands.add("mute");
-                if (sender.hasPermission("tuffx.reload")) subcommands.add("reload");
-                if (sender.hasPermission("tuffx.reloadchunks")) subcommands.add("reloadchunks");
-                if (sender.hasPermission("tuffx.help")) subcommands.add("help");
-
-                return subcommands.stream()
-                        .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
-                        .collect(Collectors.toList());
-            }
-        }
-        return Collections.emptyList();
-    }
-
-    private void sendInitialChunksToPlayer(Player player) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!player.isOnline()) return;
-
-                Chunk playerChunk = player.getLocation().getChunk();
-                int viewDistance = getServer().getViewDistance();
-                World world = player.getWorld();
-
-                for (int x = -viewDistance; x <= viewDistance; x++) {
-                    for (int z = -viewDistance; z <= viewDistance; z++) {
-                        if (world.isChunkLoaded(playerChunk.getX() + x, playerChunk.getZ() + z)) {
-                            Chunk chunk = world.getChunkAt(playerChunk.getX() + x, playerChunk.getZ() + z);
-                            sendChunkSectionsAsync(player, chunk);
-                        }
-                    }
-                }
-            }
-        }.runTaskLater(this, 1L);
-    }
-
-    private void handleMuteCommand(CommandSender sender) {
-        if (!sender.hasPermission("tuffx.mute")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
-            return;
-        }
-        isMuted = !isMuted;
-        String status = isMuted ? ChatColor.RED + "MUTED" : ChatColor.GREEN + "UNMUTED";
-        sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.YELLOW + "Console output is now " + status + ".");
-    }
-
-    private void handleReloadCommand(CommandSender sender) {
-        if (!sender.hasPermission("tuffx.reload")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
-            return;
-        }
-        sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.YELLOW + "Reloading TuffX...");
-        onDisable();
-        onEnable();
-        sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.GREEN + "Reload complete.");
-    }
-
-    private void handleReloadChunksCommand(CommandSender sender) {
-        if (!sender.hasPermission("tuffx.reloadchunks")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission to use this command.");
-            return;
-        }
-        sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.YELLOW + "Clearing chunk cache and resending to all players...");
-        sentSections.clear();
-
-        for (Player player : getServer().getOnlinePlayers()) {
-            Chunk playerChunk = player.getLocation().getChunk();
-            int viewDistance = getServer().getViewDistance();
-            World world = player.getWorld();
-
-            for (int x = -viewDistance; x <= viewDistance; x++) {
-                for (int z = -viewDistance; z <= viewDistance; z++) {
-                    if (world.isChunkLoaded(playerChunk.getX() + x, playerChunk.getZ() + z)) {
-                        Chunk chunk = world.getChunkAt(playerChunk.getX() + x, playerChunk.getZ() + z);
-                        sendChunkSectionsAsync(player, chunk);
-                    }
-                }
-            }
-        }
-        sender.sendMessage(ChatColor.GOLD + "[TuffX] " + ChatColor.GREEN + "Chunk reload initiated for all online players. Reload is complete.");
-    }
-
-    private void handleHelpCommand(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "--- TuffX Commands ---");
-        if (sender.hasPermission("tuffx.help")) {
-            sender.sendMessage(ChatColor.YELLOW + "/tuffx help" + ChatColor.GRAY + " - Shows this help message.");
-        }
-        if (sender.hasPermission("tuffx.mute")) {
-            sender.sendMessage(ChatColor.YELLOW + "/tuffx mute" + ChatColor.GRAY + " - Toggles console logging for the plugin.");
-        }
-        if (sender.hasPermission("tuffx.reload")) {
-            sender.sendMessage(ChatColor.YELLOW + "/tuffx reload" + ChatColor.GRAY + " - Reloads the TuffX plugin.");
-        }
-        if (sender.hasPermission("tuffx.reloadchunks")) {
-            sender.sendMessage(ChatColor.YELLOW + "/tuffx reloadchunks" + ChatColor.GRAY + " - Resends below y0 chunks to players.");
-        }
-        sender.sendMessage(ChatColor.GOLD + "----------------------");
-    }
-
-    private void logFancyEnable() {
-        if (isMuted) return;
-        getLogger().info("");
-        getLogger().info("████████╗██╗   ██╗███████╗ ███████╗ ██╗  ██╗");
-        getLogger().info("╚══██╔══╝██║   ██║██╔════╝ ██╔════╝ ╚██╗██╔╝");
-        getLogger().info("   ██║   ██║   ██║██████╗  ██████╗   ╚███╔╝ ");
-        getLogger().info("   ██║   ██║   ██║██╔═══╝  ██╔═══╝   ██╔██╗ ");
-        getLogger().info("   ██║   ╚██████╔╝██║      ██║      ██╔╝╚██╗");
-        getLogger().info("   ╚═╝    ╚═════╝ ╚═╝      ╚═╝      ╚═╝  ╚═╝");
-        getLogger().info("");
-        getLogger().info("Below y0 and TuffX programmed by Potato");
-        getLogger().info("Edited by coleis1op");
+        startProcessorTask();
+        getLogger().info("TuffX (Queue Model) has been enabled.");
     }
 
     @Override
     public void onDisable() {
-        getServer().getMessenger().unregisterOutgoingPluginChannel(this);
-        getServer().getMessenger().unregisterIncomingPluginChannel(this);
-        sentSections.clear();
-        if (!isMuted) getLogger().info("TuffX disabled");
+        if (processorTask != null) {
+            processorTask.cancel();
+        }
+        requestQueue.clear();
+        getLogger().info("TuffX has been disabled.");
     }
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!channel.equals(CHANNEL)) {
+        if (!channel.equals(CHANNEL) || !player.isOnline()) {
             return;
         }
-
-        new BukkitRunnable() {
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(message))) {
+            int x = in.readInt();
+            int y = in.readInt();
+            int z = in.readInt();
+            int actionLength = in.readUnsignedByte();
+            byte[] actionBytes = new byte[actionLength];
+            in.readFully(actionBytes);
+            String action = new String(actionBytes, StandardCharsets.UTF_8);
+            handleIncomingPacket(player, new Location(player.getWorld(), x, y, z), action, x, z);
+        } catch (IOException e) {
+            getLogger().warning("Failed to parse plugin message from " + player.getName() + ": " + e.getMessage());
+        }
+    }
+    
+    private void handleIncomingPacket(Player player, Location loc, String action, int chunkX, int chunkZ) {
+        switch (action.toLowerCase()) {
+            case "request_chunk":
+                Queue<Vector> queue = requestQueue.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentLinkedQueue<>());
+                queue.add(new Vector(chunkX, 0, chunkZ));
+                break;
+            case "ready":
+                String welcome = "§bWelcome, §e" + player.getName() + "§b!";
+                byte[] payload = createWelcomePayload(welcome, getServer().getOnlinePlayers().size());
+                if (payload != null) player.sendPluginMessage(this, CHANNEL, payload);
+                break;
+            case "use_on_block":
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                         Block block = loc.getBlock();
+                         ItemStack item = player.getInventory().getItemInMainHand();
+                         getServer().getPluginManager().callEvent(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, item, block, block.getFace(player.getLocation().getBlock())));
+                    }
+                }.runTask(this);
+                break;
+        }
+    }
+    
+    private void startProcessorTask() {
+        this.processorTask = new BukkitRunnable() {
             @Override
             public void run() {
-                try (ByteArrayInputStream bin = new ByteArrayInputStream(message); DataInputStream in = new DataInputStream(bin)) {
-                    int x = in.readInt();
-                    int y = in.readInt();
-                    int z = in.readInt();
-                    int actionLength = in.readUnsignedByte();
-                    byte[] actionBytes = new byte[actionLength];
-                    in.readFully(actionBytes);
-                    String action = new String(actionBytes, StandardCharsets.UTF_8);
+                for (Map.Entry<UUID, Queue<Vector>> entry : requestQueue.entrySet()) {
+                    Player player = getServer().getPlayer(entry.getKey());
+                    Queue<Vector> queue = entry.getValue();
 
-                    new BukkitRunnable() {
-                        @Override
-                        public void run() {
-                            handleInteraction(player, new Location(player.getWorld(), x, y, z), action);
-                        }
-                    }.runTask(TuffX.this);
-                } catch (IOException e) {
-                    if (!isMuted)
-                        getLogger().warning("Failed to parse plugin message from " + player.getName() + ": " + e.getMessage());
-                }
-            }
-        }.runTaskAsynchronously(this);
-    }
-
-    private void handleInteraction(Player player, Location loc, String action) {
-        World world = loc.getWorld();
-        Block block = world.getBlockAt(loc);
-
-        switch (action.toLowerCase()) {
-            case "break":
-                /*ItemStack tool = player.getInventory().getItemInMainHand();
-                if (player.getGameMode() == GameMode.SURVIVAL) {
-                    BlockBreakEvent breakEvent = new BlockBreakEvent(block, player);
-                    getServer().getPluginManager().callEvent(breakEvent);
-
-                    if (!breakEvent.isCancelled()) {
-                        block.breakNaturally(player.getInventory().getItemInMainHand());
+                    if (player == null || !player.isOnline() || queue.isEmpty()) {
+                        continue;
                     }
-                } else {
-                    block.setType(Material.AIR);
+
+                    Vector vec = queue.poll();
+                    if (vec != null) {
+                        World world = player.getWorld();
+                        int cx = vec.getBlockX();
+                        int cz = vec.getBlockZ();
+                        if (world.isChunkLoaded(cx, cz)) {
+                            processAndSendChunk(player, world.getChunkAt(cx, cz));
+                        }
+                    }
                 }
-                sendBlockUpdateToNearby(block.getLocation(), Material.AIR);*/
-                break;
-
-            case "use_on_block":
-                ItemStack itemInHand = player.getInventory().getItemInMainHand();
-                PlayerInteractEvent event = new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, itemInHand, block, block.getFace(player.getLocation().getBlock()));
-                getServer().getPluginManager().callEvent(event);
-
-                sendBlockUpdateToNearby(block.getLocation(), world.getBlockAt(loc).getType(), player);
-                break;
-
-            case "dig_start_destroy_block":
-            case "dig_abort_destroy_block":
-                break;
-
-            case "ready":
-                String welcomeMessage = "§bWelcome to the server, §e" + player.getName() + "§b!";
-                int playersOnline = getServer().getOnlinePlayers().size();
-                byte[] welcomePayload = createWelcomePayload(welcomeMessage, playersOnline);
-                player.sendPluginMessage(TuffX.this, CHANNEL, welcomePayload);
-
-                sendInitialChunksToPlayer(player);
-
-                break;
-
-            default:
-                if (!isMuted) getLogger().info("Received unhandled action '" + action + "' from " + player.getName());
-                break;
-        }
+            }
+        }.runTaskTimer(this, 0L, 1L);
     }
 
-    private void sendBlockUpdateToNearby(Location loc, Material newMaterial, Player player) {
-        byte[] payload = createBlockUpdatePayload(loc, newMaterial, player);
-        for (Player p : loc.getWorld().getPlayers()) {
-            if (p.getLocation().distanceSquared(loc) < 4096) {
-                p.sendPluginMessage(this, CHANNEL, payload);
+    private void processAndSendChunk(Player player, Chunk chunk) {
+        if (chunk == null || !player.isOnline()) return;
+
+        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
+        for (int sectionY = -4; sectionY < 0; sectionY++) {
+            try {
+                byte[] payload = createSectionPayload(snapshot, chunk.getX(), chunk.getZ(), sectionY);
+                if (payload != null) {
+                    player.sendPluginMessage(this, CHANNEL, payload);
+                }
+            } catch (IOException e) {
+                getLogger().severe("Payload creation failed for " + chunk.getX() + "," + chunk.getZ() + ": " + e.getMessage());
             }
         }
     }
-
-    /*private byte[] createBlockUpdatePayload(Location loc, Material newMaterial) {
-        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bout)) {
-            World world = player.getWorld();
-            out.writeUTF("block_update");
-            out.writeInt(loc.getBlockX());
-            out.writeInt(loc.getBlockY());
-            out.writeInt(loc.getBlockZ());
-            //out.writeShort(LegacyBlockIdManager.getLegacyShort(newMaterial));
-            Block block = world.getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
-            Material type = block.getType();
-            byte data = block.getData(); 
-            if (type == null) type = Material.AIR;
-
-            //short legacyId = LegacyBlockIdManager.getLegacyShort(type);
-            //out.writeShort(legacyId);
-
-            //Material type = snapshot.getBlockType(x, worldY, z);
-            int legacyId = LegacyBlockIds.getId(type.name().toLowerCase());
-            int legacyMeta = data & 0xF;
-            short combined = (short)((legacyMeta << 12) | (legacyId & 0xFFF));
-            out.writeShort(combined);
-            return bout.toByteArray();
-        } catch (IOException e) {
-            if (!isMuted) getLogger().severe("Failed to create block update payload! " + e.getMessage());
-            return new byte[0];
-        }
-    }*/
-
-    private byte[] createBlockUpdatePayload(Location loc, Material newMaterial, Player player) {
-        try (ByteArrayOutputStream bout = new ByteArrayOutputStream();
-            DataOutputStream out = new DataOutputStream(bout)) {
-            
-            out.writeUTF("block_update");
-            out.writeInt(loc.getBlockX());
-            out.writeInt(loc.getBlockY());
-            out.writeInt(loc.getBlockZ());
-            
-            World world = loc.getWorld();
-            if (world == null) throw new IOException("World is null for location!");
-            
-            Block block = world.getBlockAt(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
-            
-            int[] legacyData = viablockids.toLegacy(block);
-            int legacyId = legacyData[0];
-            int legacyMeta = legacyData[1];
-            short combined = (short) ((legacyMeta << 12) | (legacyId & 0xFFF));
-
-            out.writeShort(combined);
-            
-            return bout.toByteArray();
-        } catch (IOException e) {
-            if (!isMuted) getLogger().severe("Failed to create block update payload! " + e.getMessage());
-            return new byte[0];
-        }
+    
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        requestQueue.remove(event.getPlayer().getUniqueId());
     }
-
+    
     private byte[] createWelcomePayload(String message, int someNumber) {
-        try (ByteArrayOutputStream bout = new ByteArrayOutputStream();
-             DataOutputStream out = new DataOutputStream(bout)) {
-
+        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bout)) {
             out.writeUTF("welcome_data");
             out.writeUTF(message);
             out.writeInt(someNumber);
-
             return bout.toByteArray();
-
-        } catch (IOException e) {
-            if (!isMuted) getLogger().severe("Failed to create welcome payload! " + e.getMessage());
-            return new byte[0];
-        }
+        } catch (IOException e) { return null; }
     }
-
-   /* private byte[] createSectionPayload(World world, int cx, int cz, int sectionY) throws IOException {
+    
+    private byte[] createSectionPayload(ChunkSnapshot snapshot, int cx, int cz, int sectionY) throws IOException {
         try (ByteArrayOutputStream bout = new ByteArrayOutputStream(8200); DataOutputStream out = new DataOutputStream(bout)) {
             out.writeUTF("chunk_data");
-            out.writeInt(cx);
-            out.writeInt(cz);
-            out.writeInt(sectionY);
-
+            out.writeInt(cx); out.writeInt(cz); out.writeInt(sectionY);
+            boolean hasNonAirBlock = false;
             int baseY = sectionY * 16;
-            for (int y = 0; y < 16; y++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        int worldX = (cx << 4) + x;
-                        int worldY = baseY + y;
-                        int worldZ = (cz << 4) + z;
-                        Material type = world.getBlockAt(worldX, worldY, worldZ).getType();
-                        short legacyId = LegacyBlockIdManager.getLegacyShort(type);
-                        out.writeShort(legacyId);
-                    }
-                }
+            for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+                int worldY = baseY + y;
+                if (worldY < -64 || worldY > 319) { out.writeShort(0); continue; }
+                String blockKey = snapshot.getBlockData(x, worldY, z).getAsString().replace("minecraft:", "");
+                int[] legacyData = viablockids.toLegacy(blockKey);
+                if (legacyData[0] != 0) hasNonAirBlock = true;
+                out.writeShort((short) ((legacyData[1] << 12) | (legacyData[0] & 0xFFF)));
             }
+            return hasNonAirBlock ? bout.toByteArray() : null;
+        }
+    }
+    
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) { if (event.getBlock().getY() < 0) sendBlockUpdateToNearby(event.getBlock().getLocation(), Material.AIR.createBlockData()); }
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) { if (event.getBlock().getY() < 0) sendBlockUpdateToNearby(event.getBlock().getLocation(), event.getBlock().getBlockData()); }
+
+    private void sendBlockUpdateToNearby(Location loc, BlockData data) {
+        try {
+            byte[] payload = createBlockUpdatePayload(loc, data);
+            if (payload == null) return;
+            for (Player p : loc.getWorld().getPlayers()) {
+                if (p.getLocation().distanceSquared(loc) < 4096) p.sendPluginMessage(this, CHANNEL, payload);
+            }
+        } catch (IOException e) { getLogger().severe("Failed to send block update: " + e.getMessage()); }
+    }
+    
+    private byte[] createBlockUpdatePayload(Location loc, BlockData data) throws IOException {
+        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bout)) {
+            out.writeUTF("block_update");
+            out.writeInt(loc.getBlockX()); out.writeInt(loc.getBlockY()); out.writeInt(loc.getBlockZ());
+            int[] legacyData = viablockids.toLegacy(data);
+            out.writeShort((short) ((legacyData[1] << 12) | (legacyData[0] & 0xFFF)));
             return bout.toByteArray();
-        }
-    }*/
-
-    private byte[] createSectionPayload(World world, int cx, int cz, int sectionY, Player player) throws IOException {
-        //Chunk chunk = world.getChunkAt(cx, cz);
-        //ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false); // avoid lighting overhead
-
-        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(8200);
-            DataOutputStream out = new DataOutputStream(bout)) {
-            
-            out.writeUTF("chunk_data");
-            out.writeInt(cx);
-            out.writeInt(cz);
-            out.writeInt(sectionY);
-
-            int baseY = sectionY * 16;
-            for (int y = 0; y < 16; y++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        int worldY = baseY + y;
-                        int worldX = (cx << 4) + x;
-                        int worldZ = (cz << 4) + z;
-
-                        Block block = world.getBlockAt(worldX, worldY, worldZ);
-
-                        //short legacyId = LegacyBlockIdManager.getLegacyShort(type);
-                        //out.writeShort(legacyId);
-
-                        //Material type = snapshot.getBlockType(x, worldY, z);
-                        
-                        int[] legacyData = viablockids.toLegacy(block);
-                        int legacyId = legacyData[0];
-                        int legacyMeta = legacyData[1];
-                        short combined = (short)((legacyMeta << 12) | (legacyId & 0xFFF));
-                        out.writeShort(combined);
-                    }
-                }
-            }
-            return bout.toByteArray();
-        }
-    }
-
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPlayerTeleport(PlayerTeleportEvent event) {
-        Player player = event.getPlayer();
-        int viewDistance = getServer().getViewDistance();
-        World world = player.getWorld();
-        Chunk newChunk = event.getTo().getChunk();
-
-        for (int dx = -viewDistance; dx <= viewDistance; dx++) {
-            for (int dz = -viewDistance; dz <= viewDistance; dz++) {
-                int chunkX = newChunk.getX() + dx;
-                int chunkZ = newChunk.getZ() + dz;
-
-                if (!world.isChunkLoaded(chunkX, chunkZ)) continue;
-
-                ChunkSectionKey key = new ChunkSectionKey(
-                    player.getUniqueId(), world.getName(), chunkX, chunkZ, -1
-                );
-
-                if (sentSections.contains(key)) continue;
-
-                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
-                sendChunkSectionsAsync(player, chunk);
-            }
-        }
-
-        if (event.getCause() == TeleportCause.UNKNOWN && event.getFrom().getY() < 0) {
-            if (event.getPlayer().getGameMode() != GameMode.CREATIVE && event.getPlayer().getGameMode() != GameMode.SPECTATOR) {
-                event.setCancelled(true);
-            }
-        }
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        UUID playerId = event.getPlayer().getUniqueId();
-        sentSections.removeIf(key -> key.playerId().equals(playerId));
-    }
-
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        sentSections.removeIf(key -> key.playerId().equals(player.getUniqueId()));
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!player.isOnline()) return;
-
-                String welcomeMessage = "§bWelcome to the server, §e" + player.getName() + "§b!";
-                int playersOnline = getServer().getOnlinePlayers().size();
-                byte[] welcomePayload = createWelcomePayload(welcomeMessage, playersOnline);
-                if (welcomePayload.length > 0) {
-                    player.sendPluginMessage(TuffX.this, CHANNEL, welcomePayload);
-                }
-            }
-        }.runTaskLater(this, 1L);
-    }
-
-    @EventHandler
-    public void onPlayerMove(PlayerMoveEvent event) {
-        if (event.getFrom().getChunk().equals(event.getTo().getChunk())) {
-            return;
-        }
-
-        Player player = event.getPlayer();
-        Chunk newChunk = event.getTo().getChunk();
-        World world = player.getWorld();
-
-        sentSections.clear();
-
-        int viewDistance = getServer().getViewDistance();
-
-        for (int dx = -viewDistance; dx <= viewDistance; dx++) {
-            for (int dz = -viewDistance; dz <= viewDistance; dz++) {
-                int chunkX = newChunk.getX() + dx;
-                int chunkZ = newChunk.getZ() + dz;
-
-                if (!world.isChunkLoaded(chunkX, chunkZ)) continue;
-
-                ChunkSectionKey key = new ChunkSectionKey(
-                    player.getUniqueId(), world.getName(), chunkX, chunkZ, -1
-                );
-
-                if (sentSections.contains(key)) continue;
-
-                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
-                sendChunkSectionsAsync(player, chunk);
-            }
-        }
-    }
-
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onChunkLoad(ChunkLoadEvent event) {
-        if (event.isNewChunk()) return;
-        Chunk chunk = event.getChunk();
-        for (Player player : chunk.getWorld().getPlayers()) {
-            if (isPlayerInChunkRange(player, chunk, getServer().getViewDistance())) {
-                sendChunkSectionsAsync(player, chunk);
-            }
-        }
-    }
-
-    private boolean isPlayerInChunkRange(Player player, Chunk chunk, int range) {
-        int playerChunkX = player.getLocation().getChunk().getX();
-        int playerChunkZ = player.getLocation().getChunk().getZ();
-        return Math.abs(playerChunkX - chunk.getX()) <= range && Math.abs(playerChunkZ - chunk.getZ()) <= range;
-    }
-
-    private void sendChunkSectionsAsync(Player player, Chunk chunk) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                int cx = chunk.getX();
-                int cz = chunk.getZ();
-                UUID uid = player.getUniqueId();
-                String worldName = chunk.getWorld().getName();
-                World world = chunk.getWorld();
-
-                for (int sectionY = -4; sectionY < 0; sectionY++) {
-                    ChunkSectionKey key = new ChunkSectionKey(uid, worldName, cx, cz, sectionY);
-                    if (sentSections.contains(key)) {
-                        //getLogger().info("Skipping already-sent section: " + key);
-                        continue;
-                    }
-                    try {
-                        byte[] payload = createSectionPayload(world, cx, cz, sectionY, player);
-                        new BukkitRunnable() {
-                            @Override
-                            public void run() {
-                                if (player.isOnline()) {
-                                    player.sendPluginMessage(TuffX.this, CHANNEL, payload);
-                                    sentSections.add(key);
-                                }
-                            }
-                        }.runTask(TuffX.this);
-                    } catch (IOException e) {
-                        if (!isMuted)
-                            getLogger().severe("Failed to create payload for chunk section: " + key + " | " + e.getMessage());
-                    }
-                }
-            }
-        }.runTaskAsynchronously(this);
-    }
-
-    private record ChunkSectionKey(UUID playerId, String worldName, int cx, int cz, int sectionY) {
-    }
-
-
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockBreak(BlockBreakEvent event) {
-        Block block = event.getBlock();
-        sendBlockUpdateToNearby(block.getLocation(), Material.AIR, event.getPlayer());
-        //sendChunkSectionIfBelowY0(event.getPlayer(), block);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockPlace(BlockPlaceEvent event) {
-        Block block = event.getBlock();
-        sendBlockUpdateToNearby(block.getLocation(), block.getType(), event.getPlayer());
-        //sendChunkSectionIfBelowY0(event.getPlayer(), block);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockPhysics(BlockPhysicsEvent event) {
-        Block block = event.getBlock();
-        //sendBlockUpdateToNearby(block.getLocation(), block.getType(), block.getWorld().getPlayers());
-        for (Player p : block.getWorld().getPlayers()) {
-            sendBlockUpdateToNearby(block.getLocation(), block.getType(), p);
-        }
-        //sendChunkSectionIfBelowY0(null, block);
-    }
-
-    private void sendChunkSectionIfBelowY0(Player player, Block block) {
-        if (block.getY() >= 0) return; 
-
-        int sectionY = block.getY() >> 4;
-        Chunk chunk = block.getChunk();
-
-        if (player != null) {
-            sendChunkSectionsAsync(player, chunk);
-        } else {
-            for (Player p : chunk.getWorld().getPlayers()) {
-                if (isPlayerInChunkRange(p, chunk, getServer().getViewDistance())) {
-                    sendChunkSectionsAsync(p, chunk);
-                }
-            }
         }
     }
 }
