@@ -30,6 +30,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import java.util.logging.Level;
+
 public class TuffX extends JavaPlugin implements Listener, PluginMessageListener {
 
     public static final String CHANNEL = "eagler:below_y0";
@@ -38,7 +40,16 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     private static final int CHUNKS_PER_TICK = 2;
 
     private final Map<UUID, Queue<Vector>> requestQueue = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<Vector>> currentlyQueued = new ConcurrentHashMap<>();
+    
+    private final Map<UUID, Boolean> initialLoadingPlayers = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> initialChunksToProcess = new ConcurrentHashMap<>();
+
     private BukkitTask processorTask;
+
+    private void logDebug(String message) {
+        getLogger().log(Level.INFO, "[TuffX-Debug] " + message);
+    }
 
     @Override
     public void onEnable() {
@@ -75,39 +86,84 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     }
     
     private void handleIncomingPacket(Player player, Location loc, String action, int chunkX, int chunkZ) {
+        UUID playerId = player.getUniqueId();
         switch (action.toLowerCase()) {
             case "request_chunk":
-                Queue<Vector> queue = requestQueue.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentLinkedQueue<>());
-                queue.add(new Vector(chunkX, 0, chunkZ));
+                Vector chunkVec = new Vector(chunkX, 0, chunkZ);
+                Set<Vector> queuedSet = currentlyQueued.computeIfAbsent(playerId, k -> ConcurrentHashMap.newKeySet());
+
+                if (queuedSet.add(chunkVec)) { 
+                    requestQueue.computeIfAbsent(playerId, k -> new ConcurrentLinkedQueue<>()).add(chunkVec);
+                    
+                    if (initialLoadingPlayers.getOrDefault(playerId, false)) {
+                        initialChunksToProcess.merge(playerId, 1, Integer::sum);
+                        logDebug("Player " + player.getName() + " needs chunk " + chunkX + "," + chunkZ + ". Total initial chunks to process: " + initialChunksToProcess.get(playerId));
+                    }
+                }
                 break;
             case "ready":
-                String welcome = "§bWelcome, §e" + player.getName() + "§b!";
-                byte[] payload = createWelcomePayload(welcome, getServer().getOnlinePlayers().size());
-                if (payload != null) player.sendPluginMessage(this, CHANNEL, payload);
+                logDebug("Player " + player.getName() + " sent READY packet. Starting initial load sequence.");
+                
+                initialLoadingPlayers.put(playerId, true);
+                initialChunksToProcess.put(playerId, 0);
+                
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        if (initialLoadingPlayers.containsKey(playerId)) {
+                            initialLoadingPlayers.put(playerId, false); // Lock the state.
+                            logDebug("Player " + player.getName() + " initial chunk requests locked in at " + initialChunksToProcess.getOrDefault(playerId, 0) + " chunks.");
+                            
+                            if (initialChunksToProcess.getOrDefault(playerId, 0) == 0) {
+                                checkIfInitialLoadComplete(player);
+                            }
+                        }
+                    }
+                }.runTaskLater(this, 5L);
+
+                player.sendPluginMessage(this, CHANNEL, createBelowY0StatusPayload(true));
                 break;
             case "use_on_block":
                 new BukkitRunnable() {
                     @Override
                     public void run() {
-                         Block block = loc.getBlock();
-                         ItemStack item = player.getInventory().getItemInMainHand();
-                         getServer().getPluginManager().callEvent(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, item, block, block.getFace(player.getLocation().getBlock())));
+                        Block block = loc.getBlock();
+                        ItemStack item = player.getInventory().getItemInMainHand();
+                        getServer().getPluginManager().callEvent(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK, item, block, block.getFace(player.getLocation().getBlock())));
                     }
                 }.runTask(this);
                 break;
         }
+    }
+
+    private byte[] createBelowY0StatusPayload(boolean status) {
+        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bout)) {
+            out.writeUTF("belowy0_status");
+            out.writeBoolean(status);
+            return bout.toByteArray();
+        } catch (IOException e) { return null; }
     }
     
     private void startProcessorTask() {
         this.processorTask = new BukkitRunnable() {
             @Override
             public void run() {
-                for (Map.Entry<UUID, Queue<Vector>> entry : requestQueue.entrySet()) {
-                    Player player = getServer().getPlayer(entry.getKey());
-                    Queue<Vector> queue = entry.getValue();
+                for (UUID playerUUID : new HashSet<>(requestQueue.keySet())) {
+                    Player player = getServer().getPlayer(playerUUID);
+                    Queue<Vector> queue = requestQueue.get(playerUUID);
 
-                    if (player == null || !player.isOnline() || queue.isEmpty()) continue;
+                    if (player == null || !player.isOnline()) {
+                        requestQueue.remove(playerUUID);
+                        initialLoadingPlayers.remove(playerUUID);
+                        initialChunksToProcess.remove(playerUUID);
+                        currentlyQueued.remove(playerUUID);
+                        continue;
+                    }
                     
+                    if (queue == null || queue.isEmpty()) {
+                        continue; 
+                    }
+
                     for (int i = 0; i < CHUNKS_PER_TICK && !queue.isEmpty(); i++) {
                         Vector vec = queue.poll();
                         if (vec != null) {
@@ -129,16 +185,17 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     private void processAndSendChunk(final Player player, final Chunk chunk) {
         if (chunk == null || !player.isOnline()) return;
 
-        final Map<BlockData, int[]> conversionCache = new HashMap<>();
+        final Vector chunkVec = new Vector(chunk.getX(), 0, chunk.getZ());
+        logDebug("Processing chunk " + chunk.getX() + "," + chunk.getZ() + " for " + player.getName());
 
         new BukkitRunnable() {
             @Override
             public void run() {
                 final ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+                final Map<BlockData, int[]> conversionCache = new HashMap<>();
 
                 for (int sectionY = -4; sectionY < 0; sectionY++) {
-                    if (!player.isOnline()) break; 
-                    
+                    if (!player.isOnline()) break;
                     try {
                         byte[] payload = createSectionPayload(snapshot, chunk.getX(), chunk.getZ(), sectionY, conversionCache);
                         if (payload != null) {
@@ -148,13 +205,61 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                         getLogger().severe("Payload creation failed for " + chunk.getX() + "," + chunk.getZ() + ": " + e.getMessage());
                     }
                 }
+
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        if (!player.isOnline()) return;
+
+                        Set<Vector> queuedSet = currentlyQueued.get(player.getUniqueId());
+                        if (queuedSet != null) {
+                            queuedSet.remove(chunkVec);
+                        }
+                        checkIfInitialLoadComplete(player);
+                    }
+                }.runTask(TuffX.this);
             }
         }.runTaskAsynchronously(this);
     }
-    
+
+    private void checkIfInitialLoadComplete(Player player) {
+        UUID playerId = player.getUniqueId();
+        
+        if (initialChunksToProcess.containsKey(playerId)) {
+            int remaining = initialChunksToProcess.compute(playerId, (k, v) -> (v == null) ? -1 : v - 1);
+            
+            logDebug("Player " + player.getName() + " finished a chunk. Remaining initial chunks: " + remaining);
+            
+            if (remaining <= 0) {
+                initialLoadingPlayers.remove(playerId); 
+                initialChunksToProcess.remove(playerId);
+                
+                player.sendPluginMessage(this, CHANNEL, createLoadFinishedPayload());
+                logDebug("INITIAL LOAD COMPLETE for " + player.getName() + ". Sent finished packet.");
+            }
+        }
+    }
+
+    private byte[] createLoadFinishedPayload() {
+        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); 
+            DataOutputStream out = new DataOutputStream(bout)) {
+            
+            out.writeUTF("y0_load_finished");
+            
+            return bout.toByteArray();
+        } catch (IOException e) {
+            getLogger().severe("Failed to create the y0_load_finished payload!");
+            return null;
+        }
+    }
+
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        requestQueue.remove(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        requestQueue.remove(playerId);
+        initialLoadingPlayers.remove(playerId);
+        currentlyQueued.remove(playerId);
+        initialChunksToProcess.remove(playerId);
     }
     
     private byte[] createWelcomePayload(String message, int someNumber) {
