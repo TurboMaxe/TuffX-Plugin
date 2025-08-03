@@ -145,6 +145,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                     player.sendPluginMessage(this, CHANNEL, createBelowY0StatusPayload(true));
                 } else {
                     logDebug("Not a supported world!");
+                    player.sendPluginMessage(this, CHANNEL, createBelowY0StatusPayload(false));
                 }
                 break;
             case "use_on_block":
@@ -223,6 +224,8 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         }
 
         player.sendPluginMessage(this, CHANNEL, createDimensionPayload());
+
+        player.sendPluginMessage(this, CHANNEL, createBelowY0StatusPayload(enabledWorlds.contains(player.getWorld().getName())));
     }
 
     private void processAndSendChunk(final Player player, final Chunk chunk) {
