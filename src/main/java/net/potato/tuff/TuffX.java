@@ -315,38 +315,38 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     }
     
     private byte[] createSectionPayload(ChunkSnapshot snapshot, int cx, int cz, int sectionY, Map<BlockData, int[]> cache) throws IOException {
-    try (ByteArrayOutputStream bout = new ByteArrayOutputStream(12300); DataOutputStream out = new DataOutputStream(bout)) {
-        out.writeUTF("chunk_data");
-        out.writeInt(cx);
-        out.writeInt(cz);
-        out.writeInt(sectionY);
+        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(12300); DataOutputStream out = new DataOutputStream(bout)) {
+            out.writeUTF("chunk_data");
+            out.writeInt(cx);
+            out.writeInt(cz);
+            out.writeInt(sectionY);
 
-        boolean hasAnythingToSend = false;
-        int baseY = sectionY * 16;
+            boolean hasAnythingToSend = false;
+            int baseY = sectionY * 16;
 
-        for (int y = 0; y < 16; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    int worldY = baseY + y;
-                    
-                    BlockData blockData = snapshot.getBlockData(x, worldY, z);
-                    int[] legacyData = cache.computeIfAbsent(blockData, viablockids::toLegacy);
-                    out.writeShort((short) ((legacyData[1] << 12) | (legacyData[0] & 0xFFF)));
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        int worldY = baseY + y;
+                        
+                        BlockData blockData = snapshot.getBlockData(x, worldY, z);
+                        int[] legacyData = cache.computeIfAbsent(blockData, viablockids::toLegacy);
+                        out.writeShort((short) ((legacyData[1] << 12) | (legacyData[0] & 0xFFF)));
 
-                    int blockLight = snapshot.getBlockEmittedLight(x, worldY, z);
-                    int skyLight = snapshot.getBlockSkyLight(x, worldY, z);
-                    out.writeByte((byte) ((skyLight << 4) | blockLight));
+                        int blockLight = snapshot.getBlockEmittedLight(x, worldY, z);
+                        int skyLight = snapshot.getBlockSkyLight(x, worldY, z);
+                        out.writeByte((byte) ((skyLight << 4) | blockLight));
 
-                    if (legacyData[0] != 0 || blockLight != 0 || skyLight != 0) {
-                        hasAnythingToSend = true;
+                        if (legacyData[0] != 0 || blockLight != 0 || skyLight != 0) {
+                            hasAnythingToSend = true;
+                        }
                     }
                 }
             }
+            
+            return hasAnythingToSend ? bout.toByteArray() : null;
         }
-        
-        return hasAnythingToSend ? bout.toByteArray() : null;
     }
-}
 
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -367,11 +367,40 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     }
     
     private byte[] createBlockUpdatePayload(Location loc, BlockData data) throws IOException {
+        Map<Location, Byte> lightUpdates = new HashMap<>();
+        int radius = 16;
+        World world = loc.getWorld();
+
+        for (int x = loc.getBlockX() - radius; x <= loc.getBlockX() + radius; x++) {
+            for (int y = loc.getBlockY() - radius; y <= loc.getBlockY() + radius; y++) {
+                for (int z = loc.getBlockZ() - radius; z <= loc.getBlockZ() + radius; z++) {
+                    if (y >= 0 || y < -64) continue;
+
+                    Block block = world.getBlockAt(x, y, z);
+                    int blockLight = block.getLightFromBlocks();
+                    int skyLight = block.getLightFromSky();
+                    byte packedLight = (byte) ((skyLight << 4) | blockLight);
+                    
+                    lightUpdates.put(new Location(world, x, y, z), packedLight);
+                }
+            }
+        }
+
         try (ByteArrayOutputStream bout = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bout)) {
             out.writeUTF("block_update");
             out.writeInt(loc.getBlockX()); out.writeInt(loc.getBlockY()); out.writeInt(loc.getBlockZ());
             int[] legacyData = viablockids.toLegacy(data);
             out.writeShort((short) ((legacyData[1] << 12) | (legacyData[0] & 0xFFF)));
+
+            out.writeInt(lightUpdates.size());
+            for (Map.Entry<Location, Byte> entry : lightUpdates.entrySet()) {
+                Location pos = entry.getKey();
+                out.writeInt(pos.getBlockX());
+                out.writeInt(pos.getBlockY());
+                out.writeInt(pos.getBlockZ());
+                out.writeByte(entry.getValue());
+            }
+
             return bout.toByteArray();
         }
     }
