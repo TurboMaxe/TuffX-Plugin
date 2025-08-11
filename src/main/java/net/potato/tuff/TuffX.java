@@ -63,6 +63,11 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
 
     private ExecutorService chunkProcessorPool;
 
+    private final ThreadLocal<Map<BlockData, int[]>> threadLocalConversionCache = ThreadLocal.withInitial(HashMap::new);
+    private final ThreadLocal<short[]> threadLocalBlockArray = ThreadLocal.withInitial(() -> new short[4096]);
+    private final ThreadLocal<byte[]> threadLocalLightArray = ThreadLocal.withInitial(() -> new byte[4096]);
+    private final ThreadLocal<ByteArrayOutputStream> threadLocalOutStream = ThreadLocal.withInitial(() -> new ByteArrayOutputStream(8256));
+
     private void logDebug(String message) {
         if (debug) getLogger().log(Level.INFO, "[TuffX-Debug] " + message);
     }
@@ -239,48 +244,27 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
 
                     for (int i = 0; i < CHUNKS_PER_TICK && !queue.isEmpty(); i++) {
                         Vector vec = queue.poll();
-                        if (vec != null) {
-                            World world = player.getWorld();
-                            WorldChunkKey key = new WorldChunkKey(world.getName(), vec.getBlockX(), vec.getBlockZ());
+                        if (vec == null) continue;
 
-                            List<byte[]> cachedData = chunkPayloadCache.getIfPresent(key);
+                        World world = player.getWorld();
+                        WorldChunkKey key = new WorldChunkKey(world.getName(), vec.getBlockX(), vec.getBlockZ());
 
-                            if (cachedData != null) {
-                                logDebug("Cache HIT for chunk: " + key);
-                                sendPayloadsToPlayer(player, cachedData);
-                                checkIfInitialLoadComplete(player);
-                            } else {
-                                logDebug("Cache MISS for chunk: " + key + ". Generating...");
-                                new BukkitRunnable() {
-                                    @Override
-                                    public void run() {
-                                        if (world.isChunkLoaded(key.x(), key.z())) {
-                                            processAndSendChunk(player, world.getChunkAt(key.x(), key.z()));
-                                        } else {
-                                            world.loadChunk(key.x(), key.z(), true);
-                                            processAndSendChunk(player, world.getChunkAt(key.x(), key.z()));
-                                        }
-                                    }
-                                }.runTaskAsynchronously(TuffX.this);
-                            }
+                        List<byte[]> cachedData = chunkPayloadCache.getIfPresent(key);
+                        if (cachedData != null) {
+                            sendPayloadsToPlayer(player, cachedData);
+                            checkIfInitialLoadComplete(player);
+                            continue;
+                        }
+
+                        if (world.isChunkLoaded(key.x(), key.z())) {
+                            processAndSendChunk(player, world.getChunkAt(key.x(), key.z()));
+                        } else {
+                            queue.add(vec);
                         }
                     }
                 }
             }
         }.runTaskTimer(this, 0L, 1L);
-    }
-
-    private void sendPayloadsToPlayer(Player player, List<byte[]> payloads) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (player.isOnline()) {
-                    for (byte[] payload : payloads) {
-                        player.sendPluginMessage(TuffX.this, CHANNEL, payload);
-                    }
-                }
-            }
-        }.runTask(this);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -315,7 +299,8 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         chunkProcessorPool.submit(() -> {
             final List<byte[]> processedPayloads = new ArrayList<>();
             final ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
-            final Map<BlockData, int[]> conversionCache = new HashMap<>();
+            final Map<BlockData, int[]> conversionCache = threadLocalConversionCache.get();
+            conversionCache.clear(); 
 
             for (int sectionY = -4; sectionY < 0; sectionY++) {
                 if (!player.isOnline()) {
@@ -345,6 +330,19 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                 }
             }.runTask(this);
         });
+    }
+
+    private void sendPayloadsToPlayer(Player player, List<byte[]> payloads) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (player.isOnline()) {
+                    for (byte[] payload : payloads) {
+                        player.sendPluginMessage(TuffX.this, CHANNEL, payload);
+                    }
+                }
+            }
+        }.runTask(this);
     }
 
     private void invalidateChunkCache(World world, int blockX, int blockZ) {
@@ -404,8 +402,8 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     }
     
     private byte[] createSectionPayload(ChunkSnapshot snapshot, int cx, int cz, int sectionY, Map<BlockData, int[]> cache) throws IOException {
-        short[] blockDataArray = new short[4096];
-        byte[] lightDataArray = new byte[4096];
+        short[] blockDataArray = threadLocalBlockArray.get();
+        byte[] lightDataArray = threadLocalLightArray.get();
         
         boolean hasAnythingToSend = false;
         int baseY = sectionY * 16;
@@ -436,10 +434,11 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         if (!hasAnythingToSend) {
             return null;
         }
+
+        ByteArrayOutputStream bout = threadLocalOutStream.get();
+        bout.reset(); 
         
-        try (ByteArrayOutputStream bout = new ByteArrayOutputStream(8256);
-            DataOutputStream out = new DataOutputStream(bout)) {
-            
+        try (DataOutputStream out = new DataOutputStream(bout)) {
             out.writeUTF("chunk_data");
             out.writeInt(cx);
             out.writeInt(cz);
