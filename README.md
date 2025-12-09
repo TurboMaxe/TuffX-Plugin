@@ -20,3 +20,21 @@ $ mvn clean install
 ```
 
 The built plugin jar will be in the `target` folder.
+
+## Q/A
+
+Q: What dependencies do i need?
+
+A: Protocol Lib, ViaVersion & ViaBackwards
+
+Q: What version should my backend/minecraft server be?
+
+A: 1.18+ works. Use velocity to transfer eagler players.
+
+Q: Where do I install this?
+
+A: In your backend
+
+## Support!
+
+Join our [discord](https://discord.gg/G76Q3K4bWJ) for support!
