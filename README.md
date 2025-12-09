@@ -33,7 +33,7 @@ A: 1.18+ works. Use velocity to transfer eagler players.
 
 Q: Where do I install this?
 
-A: In your backend
+A: In your backend MC Server
 
 ## Support!
 
