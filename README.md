@@ -25,7 +25,7 @@ The built plugin jar will be in the `target` folder.
 
 Q: What dependencies do i need?
 
-A: Protocol Lib, ViaVersion & ViaBackwards
+A: ViaVersion & ViaBackwards
 
 Q: What version should my backend/minecraft server be?
 
