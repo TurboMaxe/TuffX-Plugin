@@ -34,7 +34,7 @@ dependencies {
     
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
     
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.4'
     
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
@@ -56,9 +56,7 @@ shadowJar {
     relocate 'com.github.retrooper.packetevents', 'tf.tuff.packetevents'
     relocate 'io.github.retrooper.packetevents', 'tf.tuff.packetevents'
     relocate 'com.fasterxml.jackson', 'tf.tuff.jackson'
-    relocate 'okhttp3', 'tf.tuff.okhttp3'
-    relocate 'okio', 'tf.tuff.okio'
-    relocate 'kotlin', 'tf.tuff.kotlin'
+    relocate 'org.java_websocket', 'tf.tuff.websocket'
     
     exclude 'META-INF/*.SF'
     exclude 'META-INF/*.DSA'

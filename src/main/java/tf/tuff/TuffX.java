@@ -49,6 +49,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     private Cache<WCK, ObjectArrayList<byte[]>> cc;
     private boolean d;
     private ExecutorService cp;
+    private ServerRegistry serverRegistry;
 
     private final ThreadLocal<Object2ObjectOpenHashMap<BlockData, int[]>> tlcc = ThreadLocal.withInitial(() -> new Object2ObjectOpenHashMap<>(256));
     private final ThreadLocal<ShortArrayList> tlba = ThreadLocal.withInitial(() -> new ShortArrayList(4096));
@@ -145,12 +146,27 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             t.setPriority(Thread.NORM_PRIORITY + 1);
             return t;
         });
+
+        if (getConfig().getBoolean("registry.enabled", false)) {
+            String url = getConfig().getString("registry.server-url");
+            String ws = getConfig().getString("registry.server");
+
+            if (!ws.isEmpty() && !ws.equals("wss://urserverip.net")) {
+                serverRegistry = new ServerRegistry(this, url, ws);
+                serverRegistry.connect();
+            }
+        }
     }
 
     public record CSC(int x, int y, int z) {}
 
     @Override
     public void onDisable() {
+        if (serverRegistry != null) {
+            serverRegistry.disconnect();
+            serverRegistry = null;
+        }
+
         PacketEvents.getAPI().terminate();
 
         if (cp != null) {
