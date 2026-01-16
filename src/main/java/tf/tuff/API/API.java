@@ -4,6 +4,8 @@ import tf.tuff.ChunkSectionKey;
 import tf.tuff.LegacyBlockIds;
 import tf.tuff.TuffX;
 
+import java.util.Collections;
+import java.util.Map;
 
 /* TuffX API for any addons 
  * author@turbomaxe
@@ -11,8 +13,10 @@ import tf.tuff.TuffX;
  */
 public class API {
 
+  private API() {}
+
   public ChunkSectionKey getChunkSectionKey() {
-    return ChunkSectionKey; 
+    return new ChunkSectionKey; 
     }
   public static Map<String, Integer> getBlockIDMap() {
     return Collections.unmodifiableMap(BlockRegistry.BLOCK_ID_MAP);
@@ -26,9 +30,6 @@ public class API {
         if (instance == null) {
             throw new IllegalStateException(
     }   
-     public static TuffX getInstance() {
-     return instance;
-    }
 }
 
 
