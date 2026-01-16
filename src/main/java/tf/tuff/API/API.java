@@ -13,10 +13,12 @@ import java.util.Map;
  */
 public class API {
 
-  private API() {}
+  public static final String version = "1.2.0";
+  
+   public API() {}
 
-  public ChunkSectionKey getChunkSectionKey() {
-    return new ChunkSectionKey; 
+  public static ChunkSectionKey getChunkSectionKey() {
+    return new ChunkSectionKey(); 
     }
   public static Map<String, Integer> getBlockIDMap() {
     return Collections.unmodifiableMap(BlockRegistry.BLOCK_ID_MAP);
@@ -26,10 +28,11 @@ public class API {
     return BlockRegistry.BLOCK_ID_MAP.get(name);
     }
 
-   public static AuctionHouseAPI getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException(
-    }   
-}
+  public static String getVersion() {
+    return version;    
+    }
+  
+}   
+
 
 
