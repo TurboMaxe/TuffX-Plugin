@@ -27,7 +27,7 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import tf.tuff.API.TuffXAPI
+import tf.tuff.API.TuffXAPI;
 
 import java.util.concurrent.*;
 import java.io.*;
