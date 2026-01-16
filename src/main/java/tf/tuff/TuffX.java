@@ -27,6 +27,7 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import tf.tuff.API.TuffXAPI
 
 import java.util.concurrent.*;
 import java.io.*;
@@ -112,6 +113,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     public void onEnable() {
         PacketEvents.getAPI().init();
         instance = this;
+        TuffxAPI.setInstance(new TuffxAPI());
 
       public static TuffX getInstance() {
         return instance;
