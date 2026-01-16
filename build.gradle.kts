@@ -13,6 +13,7 @@ java {
 
 repositories {
     mavenCentral()
+    maven("https://repo.grim.ac/snapshots")
     maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.viaversion.com/everything/")
@@ -29,9 +30,10 @@ dependencies {
 
     compileOnly("com.viaversion:viabackwards:5.3.2")
     compileOnly("com.viaversion:viaversion:5.4.1")
+    
 
     compileOnly("it.unimi.dsi:fastutil:8.5.16")
-
+    implementation("ac.grim.grimac:GrimAPI:1.2.0.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
 
     implementation("org.java-websocket:Java-WebSocket:1.5.4")
