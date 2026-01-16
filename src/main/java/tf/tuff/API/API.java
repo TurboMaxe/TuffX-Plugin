@@ -1,4 +1,4 @@
-package tf.tuff.API;
+package tf.tuff.TuffxAPI;
 
 import tf.tuff.ChunkSectionKey;
 import tf.tuff.LegacyBlockIds;
@@ -11,17 +11,35 @@ import java.util.Map;
  * author@turbomaxe
  * since 1/16/2026
  */
-public class API {
+public class TuffxAPI {
+    private static TuffxAPI instance = null
 
   public static final String version = "1.2.0";
   
-   public API() {}
+   public TuffxAPI() {}
 
   public static ChunkSectionKey getChunkSectionKey() {
     return new ChunkSectionKey(); 
     }
+
+    public static TuffxAPI getInstance() {
+        if (instance == null) {
+            throw new IllegalStateException(
+                    "The TuffX API is not initialized yet!"
+                  .stripIndent());
+        }
+        return instance;
+    }
+  
   public static Map<String, Integer> getBlockIDMap() {
     return Collections.unmodifiableMap(BlockRegistry.BLOCK_ID_MAP);
+    }
+
+    public static void setInstance(TuffxAPI newInstance) {
+        if (instance != null) {
+            throw new IllegalStateException("TuffxAPI instance has already been set!");
+        }
+        instance = newInstance;
     }
   
   public static Integer getBlockId(String name) {
