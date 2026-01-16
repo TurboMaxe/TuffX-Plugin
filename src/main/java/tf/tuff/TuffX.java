@@ -176,8 +176,6 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             l.info("    This server has GrimAC installed!    ")
             l.info(" GrimAC uses the same packet library as  ")
             l.info(" as TuffX, this may lead to false bans.  ")
-            l.info(" Most ACs use the same library, so make  ")
-            l.info("    
             l.info("-----------------------------------------")
             l.info("    Currently there is no support.       ")
             l.info("---------------- WARNING ----------------")         
