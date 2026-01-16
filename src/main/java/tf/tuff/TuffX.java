@@ -61,6 +61,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     private static final int[] EMPTY_LEGACY = {1, 0};
 
     private static Method getLightEmissionMethod;
+    private static final TuffX instance;
 
     static {
         try {
@@ -110,6 +111,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     @Override
     public void onEnable() {
         PacketEvents.getAPI().init();
+        instance = this;
 
         saveDefaultConfig();
         d = getConfig().getBoolean("debug-mode", false);
