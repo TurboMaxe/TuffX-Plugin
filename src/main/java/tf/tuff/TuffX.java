@@ -113,6 +113,11 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
         PacketEvents.getAPI().init();
         instance = this;
 
+      public static TuffX getInstance() {
+        return instance;
+        }
+ 
+
         saveDefaultConfig();
         d = getConfig().getBoolean("debug-mode", false);
         ObjectArrayList<String> ewList = new ObjectArrayList<>(getConfig().getStringList("enabled-worlds"));
