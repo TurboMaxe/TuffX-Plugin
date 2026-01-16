@@ -55,6 +55,8 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     private final ThreadLocal<ShortArrayList> tlba = ThreadLocal.withInitial(() -> new ShortArrayList(4096));
     private final ThreadLocal<ByteArrayList> tlla = ThreadLocal.withInitial(() -> new ByteArrayList(4096));
     private final ThreadLocal<ByteArrayOutputStream> tlos = ThreadLocal.withInitial(() -> new ByteArrayOutputStream(8256));
+    Logger l = Bukkit.getLogger();
+    
     
     private static final int[] EMPTY_LEGACY = {1, 0};
 
@@ -154,6 +156,31 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
             if (!ws.isEmpty() && !ws.equals("wss://urserverip.net")) {
                 serverRegistry = new ServerRegistry(this, url, ws);
                 serverRegistry.connect();
+             }
+        }
+
+         if (Bukkit.getPluginManager().isPluginEnabled("GrimAC")) {
+            /*
+             *
+             */
+            RegisteredServiceProvider<GrimAbstractAPI> provider = Bukkit.getServicesManager().getRegistration(GrimAbstractAPI.class);
+            if (provider != null) {
+                    GrimPlugin plugin = new BasicGrimPlugin(
+                        this.getLogger(),
+                        this.getDataFolder(),
+                        this.getDescription().getVersion(),
+                        this.getDescription().getDescription(),
+                        this.getDescription().getAuthors()
+               );
+            l.info("---------------- WARNING ----------------")
+            l.info("    This server has GrimAC installed!    ")
+            l.info(" GrimAC uses the same packet library as  ")
+            l.info(" as TuffX, this may lead to false bans.  ")
+            l.info(" Most ACs use the same library, so make  ")
+            l.info("    
+            l.info("-----------------------------------------")
+            l.info("    Currently there is no support.       ")
+            l.info("---------------- WARNING ----------------")         
             }
         }
     }
