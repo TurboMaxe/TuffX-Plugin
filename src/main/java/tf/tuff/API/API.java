@@ -12,7 +12,7 @@ import java.util.Map;
  * since 1/16/2026
  */
 public class TuffxAPI {
-    private static TuffxAPI instance = null
+    private static TuffxAPI instance = null;
 
   public static final String version = "1.2.0";
   
@@ -26,7 +26,7 @@ public class TuffxAPI {
         if (instance == null) {
             throw new IllegalStateException(
                     "The TuffX API is not initialized yet!"
-                  .stripIndent());
+                    );
         }
         return instance;
     }
