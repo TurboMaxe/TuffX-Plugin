@@ -325,7 +325,7 @@ public class LegacyBlockIds {
 
     public static int getId(String name) {
         if (!BLOCK_ID_MAP.containsKey(name) && unmapped.add(name)) {
-            System.out.println("Unmapped block: " + name);
+            return "Unmapped block: " + name;
         }
         return BLOCK_ID_MAP.getOrDefault(name, 1);
     }
