@@ -71,6 +71,11 @@ public class TuffxAPI {
     public static int getBlockID(String name) {
         return BLOCK_ID_MAP.getOrDefault(name, 1);
     }
+
+    public Map<String, Integer> getEntireMap() {
+        return BLOCK_ID_MAP;
+    }
+    
 }
 
 
