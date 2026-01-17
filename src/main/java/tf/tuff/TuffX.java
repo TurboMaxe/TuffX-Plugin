@@ -1,44 +1,46 @@
 package tf.tuff;
 
+import ac.grim.grimac.api.GrimAbstractAPI;
+import ac.grim.grimac.api.plugin.BasicGrimPlugin;
+import ac.grim.grimac.api.plugin.GrimPlugin;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
-import org.bukkit.Chunk;
-import org.bukkit.ChunkSnapshot;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
+import it.unimi.dsi.fastutil.bytes.ByteArrayList;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import it.unimi.dsi.fastutil.shorts.ShortArrayList;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.block.*;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.event.block.BlockPhysicsEvent;
-import org.bukkit.event.block.BlockExplodeEvent;
-import org.bukkit.event.block.BlockFromToEvent;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import tf.tuff.API.TuffXAPI;
 
-import java.util.concurrent.*;
 import java.io.*;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import com.google.common.cache.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
-import java.lang.reflect.Method; 
-import it.unimi.dsi.fastutil.objects.*;
-import it.unimi.dsi.fastutil.shorts.*;
-import it.unimi.dsi.fastutil.bytes.*;
+import java.util.logging.Logger;
 
 public class TuffX extends JavaPlugin implements Listener, PluginMessageListener {
 
@@ -62,7 +64,7 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     private static final int[] EMPTY_LEGACY = {1, 0};
 
     private static Method getLightEmissionMethod;
-    private static final TuffX instance;
+    private static TuffX instance;
 
     static {
         try {
@@ -113,11 +115,8 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
     public void onEnable() {
         PacketEvents.getAPI().init();
         instance = this;
-        TuffxAPI.setInstance(new TuffxAPI());
+        tf.tuff.API.TuffXAPI.TuffxAPI.setInstance(new tf.tuff.API.TuffXAPI.TuffxAPI());
 
-      public static TuffX getInstance() {
-        return instance;
-        }
  
 
         saveDefaultConfig();
@@ -181,18 +180,22 @@ public class TuffX extends JavaPlugin implements Listener, PluginMessageListener
                         this.getDescription().getDescription(),
                         this.getDescription().getAuthors()
                );
-            l.info("---------------- WARNING ----------------")
-            l.info("    This server has GrimAC installed!    ")
-            l.info(" GrimAC uses the same packet library as  ")
-            l.info(" as TuffX, this may lead to false bans.  ")
-            l.info("-----------------------------------------")
-            l.info("    Currently there is no support.       ")
-            l.info("---------------- WARNING ----------------")         
+            l.info("---------------- WARNING ----------------");
+            l.info("    This server has GrimAC installed!    ");
+            l.info(" GrimAC uses the same packet library as  ");
+            l.info(" as TuffX, this may lead to false bans.  ");
+            l.info("-----------------------------------------");
+            l.info("    Currently there is no support.       ");
+            l.info("---------------- WARNING ----------------") ;
             }
         }
     }
 
     public record CSC(int x, int y, int z) {}
+
+    public static TuffX getInstance() {
+        return instance;
+    }
 
     @Override
     public void onDisable() {
