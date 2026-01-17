@@ -20,12 +20,15 @@ import static tf.tuff.LegacyBlockIds.unmapped;
  */
 public class TuffxAPI {
     private static TuffxAPI instance = null;
-
+    
     public static final String version = "1.2.0";
+    
+    public TuffxAPI() {}
 
-    public TuffxAPI() {
-    }
-
+    /**
+    * uses the constructor of that method
+    * to retrive the section key
+    */
     public static ChunkSectionKey getChunkSectionKey(
             UUID player,
             String world,
@@ -36,6 +39,10 @@ public class TuffxAPI {
         return new ChunkSectionKey(player, world, x, z, y);
     }
 
+    /**
+    * gets the instance, throws
+    * an error if there isn't one
+    */
     public static TuffxAPI getInstance() {
         if (instance == null) {
             throw new IllegalStateException(
@@ -45,6 +52,12 @@ public class TuffxAPI {
         return instance;
     }
 
+    /**
+    * retrives the server registry
+    *
+    * @param pl our java plugin
+    */
+
     public ServerRegistry getServerRegistry(JavaPlugin pl, String registryUrl, String serverAddr) {
         return new ServerRegistry(pl, registryUrl, serverAddr);
     }
@@ -53,6 +66,13 @@ public class TuffxAPI {
         return Collections.unmodifiableMap(BLOCK_ID_MAP);
     }
 
+    /**
+    * setter method to make an
+    * instance
+    *
+    * @param newInstance the instance that will be made
+    */
+
     public static void setInstance(TuffxAPI newInstance) {
         if (instance != null) {
             throw new IllegalStateException("TuffxAPI instance has already been set!");
@@ -60,6 +80,12 @@ public class TuffxAPI {
         instance = newInstance;
     }
 
+    /**
+    * returns the name of a certain block
+    * using the id
+    *
+    * @param id the id of the block
+    */
     public static Integer getBlockName(int id) {
         return BLOCK_ID_MAP.get(id);
     }
@@ -68,14 +94,16 @@ public class TuffxAPI {
         return version;
     }
 
+    /**
+    * returns the id of a certain block
+    * using the name
+    *
+    * @param name the title of the block (ex. "redstone_lamp")
+    */
+
     public static int getBlockID(String name) {
         return BLOCK_ID_MAP.getOrDefault(name, 1);
     }
-
-    public Map<String, Integer> getEntireMap() {
-        return BLOCK_ID_MAP;
-    }
-    
 }
 
 
