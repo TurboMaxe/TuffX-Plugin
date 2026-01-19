@@ -22,7 +22,11 @@ public class TuffxAPI {
     private static TuffxAPI instance = null;
     
     public static final String version = "1.2.0";
-    
+
+    /**
+    * only the api can make an 
+    * instance of the plugin
+    */
     public TuffxAPI() {}
 
     /**
