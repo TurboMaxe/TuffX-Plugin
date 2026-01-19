@@ -117,6 +117,7 @@ public class TuffxAPI {
     /**
     * @return the entire block ID map
     */
+   
     public Map<String, Integer> getEntireMap() {
         return BLOCK_ID_MAP;
     }
@@ -128,6 +129,21 @@ public class TuffxAPI {
 
     public Map<String,Integer> clearEntireMap() { BLOCK_ID_MAP.clear(); return BLOCK_ID_MAP;
     }
+
+    /**
+    * gets the entire unmapped set
+    * @return the unmapped block hashset
+    */
+   
+    public static final Set<String> getUnmappedSet() { return unmapped; }
+
+    /**
+    * clears the unmapped hashset with clear();
+    *  @return the cleared hashset
+    */
+    
+    public static final Set<String> clearUnmappedSet() { unmapped.clear(); return unmapped; }
+
 }
 
 
