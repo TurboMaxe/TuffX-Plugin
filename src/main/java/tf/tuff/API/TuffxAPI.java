@@ -28,6 +28,7 @@ public class TuffxAPI {
     /**
     * uses the constructor of that method
     * to retrive the section key
+    * @return a new chunksectionkey object with the constructors
     */
     public static ChunkSectionKey getChunkSectionKey(
             UUID player,
@@ -42,6 +43,7 @@ public class TuffxAPI {
     /**
     * gets the instance, throws
     * an error if there isn't one
+    * @return the current instance if there is one
     */
     public static TuffxAPI getInstance() {
         if (instance == null) {
@@ -90,6 +92,9 @@ public class TuffxAPI {
         return BLOCK_ID_MAP.get(id);
     }
 
+    /**
+    * @return the version of TuffX
+    */
     public static String getVersion() {
         return version;
     }
@@ -99,10 +104,25 @@ public class TuffxAPI {
     * using the name
     *
     * @param name the title of the block (ex. "redstone_lamp")
+    * @return the block id map by name
     */
 
     public static int getBlockID(String name) {
         return BLOCK_ID_MAP.getOrDefault(name, 1);
+    }
+    /**
+    * @return the entire block ID map
+    */
+    public Map<String, Integer> getEntireMap() {
+        return BLOCK_ID_MAP;
+    }
+
+    /**
+    * Clears the map, useful for creating new 
+    * maps
+    */
+
+    public Map<String,Integer> clearEntireMap() { BLOCK_ID_MAP.clear(); return BLOCK_ID_MAP;
     }
 }
 
