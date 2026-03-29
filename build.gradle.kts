@@ -14,7 +14,7 @@ java {
 repositories {
     mavenCentral()
     maven("https://repo.grim.ac/snapshots")
-    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
+    maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.viaversion.com/everything/")
     maven("https://repo.codemc.io/repository/maven-releases/")
@@ -24,22 +24,22 @@ repositories {
 }
 
 dependencies {
-    compileOnly("org.spigotmc:spigot-api:1.18.2-R0.1-SNAPSHOT")
+    compileOnly(libs.paper.api)
 
-    implementation("com.github.retrooper:packetevents-spigot:2.11.1")
+    implementation(libs.packetevents)
 
-    compileOnly("com.viaversion:viabackwards:5.3.2")
-    compileOnly("com.viaversion:viaversion:5.4.1")
-    
+    compileOnly(libs.viaversion)
+    compileOnly(libs.viabackwards)
 
-    compileOnly("it.unimi.dsi:fastutil:8.5.16")
-    implementation("ac.grim.grimac:GrimAPI:1.2.0.0")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
+    compileOnly(libs.fastutil)
 
-    implementation("org.java-websocket:Java-WebSocket:1.5.4")
+    implementation(libs.grimapi)
+    implementation(libs.jackson.databind)
+    implementation(libs.java.websocket)
 
-    compileOnly("org.projectlombok:lombok:1.18.30")
-    annotationProcessor("org.projectlombok:lombok:1.18.30")
+    compileOnly(libs.lombok)
+    annotationProcessor(libs.lombok)
+
 }
 
 tasks.processResources {

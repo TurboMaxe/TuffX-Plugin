@@ -1,0 +1,28 @@
+[versions]
+paper = "1.21.11-R0.1-SNAPSHOT"
+packetevents = "2.11.1"
+viabackwards = "5.3.2"
+viaversion = "5.4.1"
+fastutil = "8.5.16"
+grimapi = "1.2.0.0"
+jackson = "2.15.2"
+websocket = "1.5.4"
+lombok = "1.18.30"
+
+[libraries]
+paper-api = { group = "io.papermc.paper", name = "paper-api", version.ref = "paper" }
+
+packetevents = { group = "com.github.retrooper", name = "packetevents-spigot", version.ref = "packetevents" }
+
+viabackwards = { group = "com.viaversion", name = "viabackwards", version.ref = "viabackwards" }
+viaversion = { group = "com.viaversion", name = "viaversion", version.ref = "viaversion" }
+
+fastutil = { group = "it.unimi.dsi", name = "fastutil", version.ref = "fastutil" }
+
+grimapi = { group = "ac.grim.grimac", name = "GrimAPI", version.ref = "grimapi" }
+
+jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jackson" }
+
+java-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "websocket" }
+
+lombok = { group = "org.projectlombok", name = "lombok", version.ref = "lombok" }
