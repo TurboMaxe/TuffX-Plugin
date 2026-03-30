@@ -1,8 +1,11 @@
 package tf.tuff;
 
+import lombok.Getter;
+
 import java.util.Objects;
 import java.util.UUID;
 
+@Getter
 public final class ChunkSectionKey {
     private final UUID p;
     private final String w;
@@ -16,26 +19,6 @@ public final class ChunkSectionKey {
         this.x = x;
         this.z = z;
         this.y = y;
-    }
-
-    public UUID p() {
-        return p;
-    }
-
-    public String w() {
-        return w;
-    }
-
-    public int x() {
-        return x;
-    }
-
-    public int z() {
-        return z;
-    }
-
-    public int y() {
-        return y;
     }
 
     @Override
